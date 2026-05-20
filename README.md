@@ -1,214 +1,105 @@
-# CubeDiff
+<h1 align="center">DreamCube: 3D Panorama Generation via Multi-plane Synchronization</h1>
 
-Open source implementation of CubeDiff for 360° panorama generation using Stable Diffusion.
 
-**Paper**: [CubeDiff: Repurposing Diffusion-Based Image Models for Panorama Generation](https://arxiv.org/abs/2501.17162) (ICLR 2025)
+<div align="center">
+  
+[![Project Page](https://img.shields.io/badge/🏠-Project%20Page-green.svg)](https://yukun-huang.github.io/DreamCube/)
+[![Paper](https://img.shields.io/badge/📑-Paper-red.svg)](https://arxiv.org/abs/2506.17206)
+[![Model](https://img.shields.io/badge/🤗-Model-yellow.svg)](https://huggingface.co/KevinHuang/DreamCube)
+[![Video](https://img.shields.io/badge/🎞️-Video-blue.svg)](https://www.youtube.com/watch?v=7x4Elc2tO6g)
 
-## About This Implementation
+</div>
 
-This is the product of a semester project carried out jointly by Hanqiu Li Cai and Juan Tarazona Rodriguez as part of their study program at ETH Zürich. This repository remains an unofficial implementation of the original paper using open-source LDMs and is not affiliated in any shape or form with Google.
+<p align="left">
+<img src="assets/teaser.png" width="100%">
+<br>
+We propose <b>Multi-plane Synchronization</b> to adapt 2D diffusion models for multi-plane panoramic representations (i.e., cubemaps), which facilitates different tasks including RGB-D panorama generation, panorama depth estimation, and 3D scene generation.
 
-## Results
-
-**If you want to directly get started with this repo, head to the [Quick Start guide](#quick-start).**
-
-We will first document the results of the implementation before getting into how you can reproduce them. In summary, the trained checkpoints we make available, using a Stable Diffusion (SD) 1.5 backbone (c.f. [Available Checkpoints](#available-pre-trained-models)), are generally able to create aesthetically pleasing and geometrically consistent panoramas. However, compared CubeDiff's results, the learning seems to be more limited and generation lackluster, with failure cases that will be discussed below. We mainly attribute this limitation to a less potent backbone LDM, given a lower number of parameters and most notably the channel count of the latent space being half of the paper's base model. Here are some examples of good generations:
-
-<p align="center">
-<img src="figures/image_1.png" width="40%"/> <img src="figures/image_2.png" width="40%"/> 
-<img src="figures/image_3.png" width="40%"/> <img src="figures/image_6.png" width="40%"/> 
-<img src="figures/image_10.png" width="40%"/> <img src="figures/image_11.png" width="40%"/> 
+Based on this design, we further introduce <b>DreamCube</b>, a diffusion-based framework for RGB-D cubemap generation from single-view inputs.
 </p>
 
-One case of failure is the inability of the model to capture geometric relationship between cube faces. In some generations, most faces are consistent, with the exception of one specific face being completely out of sync. Other instances involve noticeable seams, even having implemented the extra FoV generation from CubeDiff. These types of limitations can be seen here:
+## 📢 News
+- [2025-11-05] Release more [Jupyter notebooks](https://github.com/Yukun-Huang/DreamCube/tree/main/notebooks) for multi-plane syncronization on SANA, Lotus, and VideoCrafter2.
+- [2025-07-10] Add a [Jupyter notebook](https://github.com/Yukun-Huang/DreamCube/blob/main/multi_plane_sync.ipynb) for quickly trying Multi-plane Synchronization.
+- [2025-06-26] Accepted to ICCV 2025!
+- [2025-06-21] Release [project page](https://yukun-huang.github.io/DreamCube/), [model weights](https://huggingface.co/KevinHuang/DreamCube), and [inference code](https://github.com/Yukun-Huang/DreamCube).
 
-<p align="center">
-<img src="figures/failureseams.png" width="40%"/>
-</p>
+## ⚙️ Setup
+Please follow the instructions below to get the code and install dependencies.
 
-The second most common case of failure is generation of repetitive patterns, characteristic of diffusion models, which is most evident in a v-prediction backbone (SD2.1). Note that we do not release a v-prediction checkpoint using SD2.1 due to an inferior performance to the SD1.5 models. Reducing the CFG scale relieves this issue, but in turn leads to less geometric consistency in the generation. The scale of such repetitive patterns can range from mild to catastrophic, almost resembling pure noise. These errors are seen here:
-
-<p align="center">
-<img src="figures/failurenoise.png" width="40%"/>
-</p>
-
-It is worth noting that such error patterns are far more common in indoor scenes. Finally, we provide a table comparing different captioning methods and backbones to the original CubeDiff paper report, in terms of Frechet and Kernel Incpetion Distance measures (FID, KID, respectively):
-
-<p align="center">
-<img src="figures/fidkid.png" width="80%"/>
-</p>
-
-As can be seen, in line with the corresponding shortcomings of our trained checkpoints, the models perform generally worse across the board when compared to the reported metrics from CubeDiff. We again reiterate that this might mainly be attributed to the weaker baseline model we part from. It is worth noting that the SD2.1 model performs numerically worse than the SD1.5 model. This is caused due to the noisy pattern artifacts shown above, which cause certain perspective renderings to be completely nonsensical and thus artificially worsening the perceptual metrics. On another note, the joint dropping strategy does not seem to have a significant positive impact on the generation quality across the board.
-
-## Quick Start
-
-### Installation
-
-1. **Clone the repository:**
+### Clone the repo:
 ```bash
-git clone <repository-url>
-cd CubeDiff
+git clone https://github.com/Yukun-Huang/DreamCube.git
+cd DreamCube
 ```
 
-2. **Create a virtual environment:**
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+### Create a conda environment:
+```
+conda create -n dreamcube python=3.11
+conda activate dreamcube
 ```
 
-3. **Install dependencies:**
-```bash
+### Install dependencies:
+```
 pip install -r requirements.txt
 ```
 
-### Inference
+Please feel free to open an issue if you encounter installation problems.
 
-To run inference, specify the path to your conditioning image and prompts in `inference.py`. 
+## 💃🏻 Multi-plane Synchronization
+If you are only interested in Multi-plane Synchronization, we provide a Jupyter notebook `multi_plane_sync.ipynb` for quickly trying Multi-plane Synchronization on pre-trained diffusion models like SD2, SDXL, and Marigold.
 
-**Important**: The conditioning image must have a 1:1 aspect ratio for proper conditioning.
-
-#### Text Conditioning Modes
-
-The prompts can be provided in three different formats depending on the model:
-
-1. **Image-only mode** (`imgonly`): Use empty string `""`
-2. **Single caption mode** (`singlecaption`): Provide a single string caption
-3. **Multi-text mode** (`multitxt`): Provide a list of 6 strings in the order: `[front, back, left, right, top, bottom]`
-
-#### Semantic Scene Planning Mode
-
-The pipeline also supports an optional structured `scene_plan` that adds a global scene context, face-specific artifacts, adjacency relations, and an optional verification hook before generation retries. This is useful when you want to keep lighting, palette, and style coherent across cube faces while still controlling semantic placement.
-
-#### Available Pre-trained Models
-
-| Model | Hugging Face ID | Description |
-|------|------------------|-------------|
-| Image-only | [hlicai/cubediff-512-imgonly](https://huggingface.co/hlicai/cubediff-512-imgonly) | Generates panoramas without text conditioning |
-| Single Caption | [hlicai/cubediff-512-singlecaption](https://huggingface.co/hlicai/cubediff-512-singlecaption) | Uses one prompt for all cube faces |
-| Multi-text | [hlicai/cubediff-512-multitxt](https://huggingface.co/hlicai/cubediff-512-multitxt) | Different prompts for each cube face |
-
-#### Example Usage
-
+The code implementation is very simple. The key lines are as follows:
 ```python
-from cubediff.pipelines.pipeline import CubeDiffPipeline
-
-# Load model from Hugging Face
-pipe = CubeDiffPipeline.from_pretrained("hlicai/cubediff-512-singlecaption")
-
-# Single caption example
-result = pipe(
-    prompts="A beautiful sunset over mountains",
-    conditioning_image=your_conditioning_image,
-    num_inference_steps=50
-)
-
-# Multi-text example  
-pipe_multi = CubeDiffPipeline.from_pretrained("hlicai/cubediff-512-multitxt")
-result = pipe_multi(
-    prompts=[
-        "Mountain view",      # front
-        "Forest landscape",   # back  
-        "Ocean waves",        # left
-        "Desert dunes",       # right
-        "Cloudy sky",         # top
-        "Rocky ground"        # bottom
-    ],
-    conditioning_image=your_conditioning_image
-)
-
-# Semantic planning example
-from cubediff.pipelines.pipeline import SceneSemanticPlan
-
-scene_plan = SceneSemanticPlan.from_dict({
-    "global_context": {
-        "era": "Ancient Egypt, around 1300 BCE",
-        "climate": "arid desert, clear sky",
-        "time_of_day": "late afternoon, warm golden light",
-        "style": "photorealistic, high resolution",
-    },
-    "face_artifacts": {
-        "front": ["pyramids of Giza"],
-        "left": ["Nile river and palm trees"],
-    },
-    "adjacency_relations": {
-        "left": "The Nile should flow toward the front face.",
-    },
-})
-
-result = pipe(
-    prompts="",
-    conditioning_image=your_conditioning_image,
-    scene_plan=scene_plan,
-)
+pipe = StableDiffusionPipeline.from_pretrained(...)
+apply_custom_processors_for_unet(pipe.unet, enable_sync_self_attn=True, enable_sync_cross_attn=False, enable_sync_conv2d=True, enable_sync_gn=True)
+apply_custom_processors_for_vae(pipe.vae, enable_sync_attn=True, enable_sync_gn=True, enable_sync_conv2d=True)
 ```
+<p align="middle">
+<img src="assets/notebook_snapshot.png" width="100%">
+</p>
 
-### Training
+More implementations (SANA, Lotus, and VideoCrafter 2) can be found in `notebooks/`.
 
-We provide comprehensive training code with single and multi-GPU support via Accelerate.
+## 🕺 DreamCube - Inference
+We provide inference scripts for generating RGB-D cubemaps and 3D scenes (both mesh and 3dgs) from single-view inputs. The trained model weights are automatically downloaded from [HuggingFace](https://huggingface.co/KevinHuang/DreamCube).
 
-#### Launch Training
-
+### - Using the Gradio Interface
 ```bash
-accelerate launch train.py --config default
+bash app.py --use-gradio
 ```
+It takes about 20 seconds to produce RGB-D cubemap, RGB-D equirectangular panorama, and corresponding 3D scenes (both mesh and 3dgs) on a Nvidia L40S GPU.
+<p align="middle">
+<img src="assets/gradio_snapshot.png" width="100%">
+</p>
 
-#### Custom Configurations
-
-You can create additional training configurations in the `training/configs/` folder:
-
+### - Using the Command Line
 ```bash
-# Create custom config
-cp training/configs/default.yaml training/configs/my_config.yaml
-
-# Launch with custom config (note: no .yaml extension)
-accelerate launch train.py --config my_config
+bash app.py
 ```
+The results will be saved to `./outputs`.
 
-## Project Organization
+## 👏 Acknowledgement
+This repository is based on many amazing research works and open-source projects: [CubeDiff](https://cubediff.github.io/), [CubeGAN](https://diglib.eg.org/items/33594150-5a5d-4d36-9957-aa8c88d4c835), [PanFusion](https://github.com/chengzhag/PanFusion), [MVDiffusion](https://github.com/Tangshitao/MVDiffusion), [PanoDiffusion](https://github.com/PanoDiffusion/PanoDiffusion), [WorldGen](https://github.com/ZiYang-xie/WorldGen), etc. Thanks all the authors for their selfless contributions to the community!
 
+## 😉 Citation
+If you find this repository helpful for your work, please consider citing it as follows:
+```bib
+@inproceedings{dreamcube,
+    title     = {{DreamCube: RGB-D Panorama Generation via Multi-plane Synchronization}},
+    author    = {Huang, Yukun and Zhou, Yanning and Wang, Jianan and Huang, Kaiyi and Liu, Xihui},
+    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+    month     = {October},
+    year      = {2025},
+    pages     = {24922-24932}
+}
+
+@article{dreamcube_arxiv,
+  title={{DreamCube: 3D Panorama Generation via Multi-plane Synchronization}},
+  author={Huang, Yukun and Zhou, Yanning and Wang, Jianan and Huang, Kaiyi and Liu, Xihui},
+  year={2025},
+  eprint={arXiv preprint arXiv:2506.17206},
+  archivePrefix={arXiv},
+  primaryClass={cs.CV},
+}
 ```
-├── LICENSE                     <- Open-source license
-├── README.md                   <- Project documentation  
-├── requirements.txt            <- Python dependencies
-├── inference.py                <- Main inference script
-├── train.py                   <- Main training script
-│
-├── ckpts/                     <- Local model checkpoints
-│   ├── 512-imageonly/         <- Image-only conditioning model
-│   ├── 512-singlecap/         <- Single caption conditioning model
-│   └── 512-multitxt/          <- Multi-text conditioning model
-│
-├── cubediff/                  <- Core CubeDiff implementation
-│   ├── modules/               <- Custom neural network modules
-│   │   ├── attention.py       <- Custom attention mechanisms
-│   │   ├── extra_channels.py  <- Input channel expansion utilities
-│   │   ├── norm.py            <- Custom normalization layers
-│   │   └── utils.py           <- Utility functions for model patching
-│   └── pipelines/             <- Diffusion pipelines
-│       ├── pipeline.py        <- Main CubeDiffPipeline implementation
-│       └── postprocessing.py  <- Image postprocessing utilities
-│
-└── training/                  <- Training configurations and utilities
-    ├── configs/               <- Training configuration files
-    │   └── default.yaml       <- Default training configuration
-    └── dataset.py             <- Dataset loading and preprocessing
-```
-
-## Requirements
-
-- Python 3.8+
-- PyTorch 1.12+
-- CUDA-capable GPU (recommended)
-- 8GB+ VRAM for inference, 16GB+ for training
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the terms specified in the LICENSE file.

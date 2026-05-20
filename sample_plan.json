@@ -1,0 +1,17 @@
+{
+  "global_context": {
+    "era": "Ancient Egypt",
+    "style": "hyperrealistic, warm golden light, cinematic, photorealistic",
+    "lighting": "sunset golden hour",
+    "mood": "mysterious"
+  },
+  "face_artifacts": {
+    "front": ["grand temple entrance with towering columns", "hieroglyphs on walls"],
+    "right": ["sand dunes and distant pyramids"],
+    "back": ["river with palm trees and small boats"],
+    "left": ["marketplace with banners and pottery"],
+    "top": ["aerial view with birds and sunlight rays"],
+    "bottom": ["ornate stone plinth and carved bas-reliefs"]
+  },
+  "verification_targets": {}
+}

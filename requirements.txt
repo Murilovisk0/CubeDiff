@@ -1,33 +1,15 @@
-# Core ML dependencies
-torch
-torchvision
-diffusers==0.34.0
-transformers<5.0.0
-accelerate
-safetensors
-
-# Image processing and 360° utilities
-pillow
-opencv-python
-py360convert
+torch==2.4.1
+torchvision==0.19.1
+diffusers==0.32.0
+transformers==4.48.3
+gradio==5.4.0
+gsplat==1.5.2
+pytorch3d==0.7.8
+scipy==1.15.3
 einops
-numpy
-
-# Training and experiment tracking
-wandb
-omegaconf
-hydra-core
-
-# Hugging Face Hub integration
-huggingface_hub
-
-# Utility packages
-filetype
-
-# Development tools (optional)
-black
-flake8
-isort
-
-# Local package installation
--e .
+matplotlib
+open3d
+opencv_python
+pillow
+tqdm
+trimesh

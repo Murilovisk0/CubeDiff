@@ -1,18 +1,3 @@
-# Data
-/data/
-
-# pretrained models
-/models/
-
-# Mac OS-specific storage files
-.DS_Store
-
-# vim
-*.swp
-*.swo
-
-## https://github.com/github/gitignore/blob/4488915eec0b3a45b5c63ead28f286819c0917de/Python.gitignore
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -83,8 +68,8 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# MkDocs documentation
-docs/site/
+# Sphinx documentation
+docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -172,7 +157,15 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
 
-ckpts/
-data/
+/.vscode
+/pyrightconfig.json
+
+/data
+/outputs
+/temp
+
+/*.submit
+/*.out
+/*.err
