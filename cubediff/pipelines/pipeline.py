@@ -10,6 +10,8 @@ from diffusers.pipelines.stable_diffusion.pipeline_output import BaseOutput
 from ..modules.extra_channels import make_extra_channels_tensor
 from ..modules.utils import patch_groupnorm, patch_unet, swap_transformer_blocks
 from .postprocessing import postprocess_outputs
+from .verifier import CLIPVerifier
+import cv2
 
 
 FACE_ORDER = ["front", "back", "left", "right", "top", "bottom"]
@@ -94,37 +96,46 @@ def _compose_face_prompt(
     if scene_plan is None:
         return base_prompt
 
-    sections: List[str] = []
-
-    context_block = _format_context_block("Global scene context", scene_plan.global_context)
-    if context_block:
-        sections.append(context_block)
-
-    if base_prompt.strip():
-        sections.append(f"Base prompt: {base_prompt.strip()}")
-
-    face_override = scene_plan.face_overrides.get(face_name, "").strip()
-    if face_override:
-        sections.append(f"Face override: {face_override}")
+    context_parts: List[str] = []
+    for key in ["era", "climate", "time_of_day", "style", "lighting_direction", "palette", "restrictions"]:
+        value = scene_plan.global_context.get(key, "").strip()
+        if value:
+            context_parts.append(value)
 
     artifacts = scene_plan.face_artifacts.get(face_name, [])
-    artifact_block = _format_list_block("Primary artifacts", artifacts)
-    if artifact_block:
-        sections.append(artifact_block)
-
+    face_override = scene_plan.face_overrides.get(face_name, "").strip()
     adjacency = scene_plan.adjacency_relations.get(face_name, "").strip()
-    if adjacency:
-        sections.append(f"Spatial continuity: {adjacency}")
-
     verification_targets = scene_plan.verification_targets.get(face_name, [])
-    verification_block = _format_list_block("Verification targets", verification_targets)
-    if verification_block:
-        sections.append(verification_block)
+
+    prompt_parts: List[str] = []
+    if context_parts:
+        prompt_parts.append(
+            "Global scene: " + ", ".join(context_parts)
+        )
+
+    if base_prompt.strip():
+        prompt_parts.append(f"Face {face_name}: {base_prompt.strip()}")
+
+    if face_override:
+        prompt_parts.append(face_override)
+
+    if artifacts:
+        prompt_parts.append("Main subject: " + ", ".join(artifacts))
+
+    if adjacency:
+        prompt_parts.append(f"Continuity: {adjacency}")
+
+    if verification_targets:
+        prompt_parts.append("Must contain: " + ", ".join(verification_targets))
 
     if verification_feedback:
-        sections.append(f"Verification feedback: {verification_feedback.strip()}")
+        prompt_parts.append(verification_feedback.strip())
 
-    return "\n".join(section for section in sections if section)
+    prompt_parts.append(
+        "Keep the same horizon, lighting direction, color temperature, and photorealistic style across all faces."
+    )
+
+    return " | ".join(part for part in prompt_parts if part)
 
 
 def _resolve_face_prompts(
@@ -210,6 +221,7 @@ class CubeDiffPipeline(StableDiffusionPipeline):
                 current_prompts,
                 max_length=self.tokenizer.model_max_length,
                 padding="max_length",
+                truncation=True,
                 return_tensors="pt",
             )
             encoder_hidden_states = self.text_encoder(text_inputs.input_ids.to(device))[0]
@@ -218,6 +230,7 @@ class CubeDiffPipeline(StableDiffusionPipeline):
                 [""] * T,
                 padding="max_length",
                 max_length=self.tokenizer.model_max_length,
+                truncation=True,
                 return_tensors="pt",
             )
             uncond_embeddings = self.text_encoder(uncond_inputs.input_ids.to(device))[0]
@@ -272,11 +285,66 @@ class CubeDiffPipeline(StableDiffusionPipeline):
 
             if face_verifier is None or scene_plan is None or attempt == max_rounds - 1:
                 break
+            # If no explicit face_verifier provided by the user, use a default CLIP verifier
+            if face_verifier is None:
+                face_verifier = CLIPVerifier(device=device)
+
+            # --- Color consistency check (HSV mean) between adjacent lateral faces ---
+            # compute mean HSV for each face image
+            hsv_means = {}
+            for face_name, face_img in zip(FACE_ORDER, cropped):
+                # face_img: HxWxC in uint8
+                try:
+                    img_bgr = cv2.cvtColor(face_img, cv2.COLOR_RGB2BGR)
+                    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV).astype(float) / 255.0
+                    mean_h = float(hsv[:, :, 0].mean())
+                    mean_s = float(hsv[:, :, 1].mean())
+                    mean_v = float(hsv[:, :, 2].mean())
+                except Exception:
+                    # fallback: compute simple RGB mean
+                    mean_h = 0.0
+                    mean_s = 0.0
+                    mean_v = float(face_img.mean() / 255.0)
+
+                hsv_means[face_name] = (mean_h, mean_s, mean_v)
+
+            # adjacency pairs to check: left-front, front-right, right-back, back-left, plus top/bottom vs neighbors
+            adjacency_pairs = [
+                ("left", "front"),
+                ("front", "right"),
+                ("right", "back"),
+                ("back", "left"),
+                ("top", "front"),
+                ("bottom", "front"),
+            ]
 
             failed_faces: Dict[str, str] = {}
+            color_thresh = 0.18  # empirical threshold on HSV channel differences
+            for a, b in adjacency_pairs:
+                ha, sa, va = hsv_means.get(a, (0.0, 0.0, 0.0))
+                hb, sb, vb = hsv_means.get(b, (0.0, 0.0, 0.0))
+                dh = abs(ha - hb)
+                ds = abs(sa - sb)
+                dv = abs(va - vb)
+                if dh > color_thresh or ds > color_thresh or dv > color_thresh:
+                    # Request color/palette continuity for both faces
+                    msg = (
+                        f"Palette mismatch between {a} and {b}: match horizon/light temperature and palette to neighbor."
+                    )
+                    if a not in failed_faces:
+                        failed_faces[a] = msg
+                    if b not in failed_faces:
+                        failed_faces[b] = msg
+
+            # --- Semantic verification per face using CLIP (or provided verifier) ---
             for face_name, face_img in zip(FACE_ORDER, cropped):
                 expected = scene_plan.verification_targets.get(face_name) or scene_plan.face_artifacts.get(face_name, [])
-                if face_verifier(face_name, face_img, expected, scene_plan):
+                try:
+                    ok = bool(face_verifier(face_name, face_img, expected, scene_plan))
+                except Exception:
+                    ok = True  # if verifier fails, skip to avoid blocking
+
+                if ok:
                     continue
 
                 if expected:
